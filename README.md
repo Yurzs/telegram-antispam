@@ -10,6 +10,7 @@ Telegram bot for filtering channel comments and preventing spam in discussion gr
 - 👮 **Admin-friendly**: Admins can post any links without restrictions; non-admins' commands are silently ignored
 - 📬 **Admin notifications**: Deleted messages are forwarded to admins via private message for review
 - ⚙️ **Easy configuration**: Simple commands to manage the bot
+- 🔄 **Polling & Webhook support**: Choose between polling mode or webhook mode for receiving updates
 - 🐳 **Docker support**: Easy deployment with Docker and docker-compose
 - 📦 **UV package manager**: Fast, reliable dependency management with UV
 
@@ -145,6 +146,20 @@ Environment variables in `.env`:
 
 - `BOT_TOKEN` - Your Telegram bot token (required)
 - `LOG_LEVEL` - Logging level: DEBUG, INFO, WARNING, ERROR (default: INFO)
+
+### Webhook Configuration (Optional)
+
+The bot supports both **polling** (default) and **webhook** modes:
+
+- `WEBHOOK_MODE` - Set to `true` to enable webhooks, `false` for polling (default: false)
+- `WEBHOOK_HOST` - Your public webhook URL (required if WEBHOOK_MODE=true, e.g., `https://yourdomain.com`)
+- `WEBHOOK_PATH` - Webhook endpoint path (default: `/webhook`)
+- `WEBHOOK_PORT` - Port for the webhook server (default: `8080`)
+- `WEBHOOK_SECRET` - Secret token for webhook security (optional but recommended)
+
+**Polling vs Webhook:**
+- **Polling** (default): Bot actively checks for new messages. Easier to set up, works anywhere.
+- **Webhook**: Telegram sends updates to your server. More efficient, requires public HTTPS URL and port forwarding/reverse proxy.
 
 ## Development
 
