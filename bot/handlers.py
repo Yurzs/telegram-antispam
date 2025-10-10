@@ -123,13 +123,21 @@ async def cmd_config(message: Message, bot: Bot) -> None:
         await message.answer(
             "❌ Please provide a chat ID.\n\n"
             "Usage: /config <chat_id>\n"
-            "Example: /config -1002986805684\n\n"
+            "Example: /config -1002986805684\n"
+            "Or: /config 2986805684 (without -100 prefix)\n\n"
             "You can get the chat ID by using /status in the group."
         )
         return
 
     try:
-        chat_id = int(command_args[1])
+        chat_id_input = command_args[1]
+        # Remove leading minus if present
+        if chat_id_input.startswith("-"):
+            chat_id = int(chat_id_input)
+        else:
+            # If no minus, assume it's the short format (like from t.me/c/ links)
+            # Convert to full chat ID format by adding -100 prefix
+            chat_id = int(f"-100{chat_id_input}")
     except ValueError:
         await message.answer(
             "❌ Invalid chat ID. Please provide a valid numeric chat ID."
