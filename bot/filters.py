@@ -39,11 +39,14 @@ async def get_linked_channel(bot: Bot, chat_id: int) -> Optional[Chat]:
     """Get the channel linked to a chat (discussion group)."""
     try:
         chat = await bot.get_chat(chat_id)
-        if chat.linked_chat_id:
+        # Check if this chat has a linked chat (for discussion groups, this is the channel)
+        if hasattr(chat, 'linked_chat_id') and chat.linked_chat_id:
             linked_chat = await bot.get_chat(chat.linked_chat_id)
             return linked_chat
-    except Exception:
-        pass
+    except Exception as e:
+        # Log the error for debugging
+        import logging
+        logging.getLogger(__name__).error(f"Error getting linked channel for chat {chat_id}: {e}")
     return None
 
 
