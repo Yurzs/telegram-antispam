@@ -1,6 +1,9 @@
 services:
   bot:
-    build: .
+    # Use pre-built image from GitHub Container Registry
+    image: ghcr.io/yurzs/telegram-antispam:latest
+    # Or build locally (comment out 'image' line above and uncomment below)
+    # build: .
     env_file:
       - .env
     restart: unless-stopped

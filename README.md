@@ -53,7 +53,17 @@ python -m bot
 
 #### Using Docker Compose (Recommended for Production)
 
-**Note**: Docker build requires internet access to download dependencies from PyPI.
+**Using Pre-built Image from GitHub Container Registry:**
+
+```bash
+# Pull and run the latest image
+docker pull ghcr.io/yurzs/telegram-antispam:latest
+
+# Or use docker-compose (update docker-compose.yml to use the pre-built image)
+docker-compose up -d
+```
+
+**Building Locally:**
 
 ```bash
 # Build and run the bot
@@ -66,7 +76,7 @@ docker-compose logs -f
 docker-compose down
 ```
 
-If you encounter SSL certificate errors during Docker build, you can use the pre-built image approach or run locally with UV.
+**Note**: Pre-built images are automatically published to GitHub Container Registry on every release and main branch update. You can also build locally if needed.
 
 ## Bot Setup in Telegram
 
