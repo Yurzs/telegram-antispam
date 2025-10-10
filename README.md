@@ -95,26 +95,33 @@ If you encounter SSL certificate errors during Docker build, you can use the pre
 
 1. **The bot monitors all messages in the discussion group**
 2. **When a message contains links:**
+   - If the message is from the linked channel itself (via `sender_chat`) → message is allowed ✅
    - If the user is an admin → message is allowed ✅
    - If the link is to the connected channel → message is allowed ✅
    - Otherwise → message is deleted ❌
-3. **Admins can configure the bot using commands in the group**
+3. **Admins can configure the bot using commands in private chat**
 
 ### Example Scenarios
 
-**Scenario 1: Regular user posts a link to the connected channel**
+**Scenario 1: Channel posts to its discussion group**
+```
+Channel: "New article published! https://example.com/article"
+Bot: ✅ Allowed (message from linked channel)
+```
+
+**Scenario 2: Regular user posts a link to the connected channel**
 ```
 User: "Check out our latest post! https://t.me/mychannel/123"
 Bot: ✅ Allowed (link to connected channel)
 ```
 
-**Scenario 2: Regular user posts an external link**
+**Scenario 3: Regular user posts an external link**
 ```
 User: "Visit https://spam-site.com for prizes!"
 Bot: ❌ Deleted (external link from non-admin)
 ```
 
-**Scenario 3: Admin posts any link**
+**Scenario 4: Admin posts any link**
 ```
 Admin: "Here's a useful resource: https://example.com"
 Bot: ✅ Allowed (admin user)
