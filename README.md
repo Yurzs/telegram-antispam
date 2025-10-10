@@ -79,6 +79,58 @@ docker-compose down
 
 **Note**: Pre-built images are automatically published to GitHub Container Registry when you create a new version tag (e.g., `v1.0.0`). You can also build locally if needed.
 
+#### Using Webhook Mode (Advanced)
+
+For production deployments with webhook mode:
+
+1. **Set up a reverse proxy (e.g., nginx with SSL)**
+2. **Configure environment variables:**
+   ```bash
+   # In your .env file
+   BOT_TOKEN=your_bot_token_here
+   WEBHOOK_MODE=true
+   WEBHOOK_HOST=https://yourdomain.com
+   WEBHOOK_PATH=/webhook
+   WEBHOOK_PORT=8080
+   WEBHOOK_SECRET=your_random_secret_token
+   ```
+
+3. **Update docker-compose.yml to expose the webhook port:**
+   ```yaml
+   services:
+     bot:
+       image: ghcr.io/yurzs/telegram-antispam:latest
+       env_file:
+         - .env
+       restart: unless-stopped
+       ports:
+         - "8080:8080"  # Expose webhook port
+   ```
+
+4. **Configure nginx as reverse proxy:**
+   ```nginx
+   server {
+       listen 443 ssl;
+       server_name yourdomain.com;
+       
+       ssl_certificate /path/to/cert.pem;
+       ssl_certificate_key /path/to/key.pem;
+       
+       location /webhook {
+           proxy_pass http://localhost:8080/webhook;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+       }
+   }
+   ```
+
+5. **Start the bot:**
+   ```bash
+   docker-compose up -d
+   ```
+
 ## Bot Setup in Telegram
 
 1. **Add the bot to your channel's discussion group**
