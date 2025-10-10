@@ -201,7 +201,7 @@ async def cmd_disable(message: Message, bot: Bot) -> None:
 @router.message()
 async def filter_message(message: Message, bot: Bot) -> None:
     """Filter messages for spam."""
-    if not message.chat or not message.from_user:
+    if not message.chat:
         return
     
     # Only filter in groups/supergroups
@@ -220,6 +220,20 @@ async def filter_message(message: Message, bot: Bot) -> None:
     if linked_channel and linked_channel.username:
         config.allowed_channel_username = linked_channel.username
         set_chat_config(message.chat.id, config)
+    
+    # Check if message is from the linked channel (sender_chat field)
+    # Messages from channels have from.id = 777000 and sender_chat contains the actual channel
+    if message.sender_chat and linked_channel:
+        if message.sender_chat.id == linked_channel.id:
+            # This is a message from the linked channel, don't filter it
+            logger.debug(
+                f"Skipping message from linked channel {linked_channel.id} in chat {message.chat.id}"
+            )
+            return
+    
+    # Skip if no from_user (shouldn't happen after sender_chat check, but be safe)
+    if not message.from_user:
+        return
     
     # Check if message should be deleted
     try:
