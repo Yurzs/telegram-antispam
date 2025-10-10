@@ -21,18 +21,67 @@ def extract_links(text: Optional[str]) -> list[str]:
     if not text:
         return []
     
-    # Pattern to match URLs
-    url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+'
+    links = []
+    
+    # Pattern to match URLs with protocol
+    url_with_protocol = r'https?://[^\s<>"{}|\\^`\[\]]+'
+    
+    # Pattern to match URLs without protocol (common short links and domains)
+    # Matches things like: t.co/xyz, bit.ly/abc, example.com/path
+    url_without_protocol = r'(?:^|[\s])([a-zA-Z0-9][-a-zA-Z0-9]{0,62}(?:\.[a-zA-Z0-9][-a-zA-Z0-9]{0,62})+(?:/[^\s]*)?)'
+    
     # Pattern to match @username mentions
     mention_pattern = r'@[\w]+'
-    # Pattern to match t.me links
-    tme_pattern = r't\.me/[\w]+'
     
-    urls = re.findall(url_pattern, text, re.IGNORECASE)
-    mentions = re.findall(mention_pattern, text, re.IGNORECASE)
-    tme_links = re.findall(tme_pattern, text, re.IGNORECASE)
+    # Pattern to match t.me links (with or without protocol)
+    tme_pattern = r'(?:https?://)?t\.me/[^\s]+'
     
-    return urls + mentions + tme_links
+    # Extract URLs with protocol
+    links.extend(re.findall(url_with_protocol, text, re.IGNORECASE))
+    
+    # Extract URLs without protocol
+    for match in re.finditer(url_without_protocol, text, re.IGNORECASE):
+        url = match.group(1).strip()
+        # Only add if it looks like a real URL (has a path or known short domain)
+        if '/' in url or any(domain in url.lower() for domain in ['t.co', 'bit.ly', 'tinyurl.com', 'goo.gl']):
+            links.append(url)
+    
+    # Extract @mentions
+    links.extend(re.findall(mention_pattern, text, re.IGNORECASE))
+    
+    # Extract t.me links (may overlap but that's ok)
+    links.extend(re.findall(tme_pattern, text, re.IGNORECASE))
+    
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_links = []
+    for link in links:
+        if link.lower() not in seen:
+            seen.add(link.lower())
+            unique_links.append(link)
+    
+    return unique_links
+
+
+def extract_entities_links(message: Message) -> list[str]:
+    """Extract links from message entities (formatted links in HTML/Markdown)."""
+    links = []
+    
+    if not message.entities:
+        return links
+    
+    for entity in message.entities:
+        # Check for URL entities
+        if entity.type == "url":
+            # Extract the URL text from the message
+            if message.text:
+                url = message.text[entity.offset:entity.offset + entity.length]
+                links.append(url)
+        # Check for text_link entities (formatted links like [text](url))
+        elif entity.type == "text_link" and entity.url:
+            links.append(entity.url)
+    
+    return links
 
 
 async def get_linked_channel(bot: Bot, chat_id: int) -> Optional[Chat]:
@@ -96,8 +145,12 @@ async def should_delete_message(
         if is_admin:
             return False
     
-    # Extract all links
+    # Extract all links from text
     links = extract_links(text)
+    
+    # Also extract links from message entities (formatted links)
+    entity_links = extract_entities_links(message)
+    links.extend(entity_links)
     
     # No links found - message is OK
     if not links:
