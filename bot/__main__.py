@@ -21,20 +21,20 @@ async def main() -> None:
     """Main bot function."""
     # Load configuration
     config = Config.from_env()
-    
+
     # Setup logging
     setup_logging(config.log_level)
     logger = logging.getLogger(__name__)
-    
+
     logger.info("Starting Telegram Antispam Bot...")
-    
+
     # Initialize bot and dispatcher
     bot = Bot(token=config.bot_token)
     dp = Dispatcher()
-    
+
     # Register router
     dp.include_router(router)
-    
+
     # Start polling
     try:
         logger.info("Bot started successfully!")

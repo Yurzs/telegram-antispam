@@ -7,7 +7,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
 
 from .filters import is_user_admin, get_linked_channel, should_delete_message
-from .storage import ChatConfig, get_chat_config, set_chat_config
+from .storage import get_chat_config, set_chat_config
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ async def get_chat_admins(bot: Bot, chat_id: int) -> list[int]:
 async def notify_admins_of_deletion(bot: Bot, message: Message, chat_id: int) -> None:
     """Forward deleted message to chat admins via private message."""
     admin_ids = await get_chat_admins(bot, chat_id)
-    
+
     for admin_id in admin_ids:
         try:
             # Create notification message
@@ -38,10 +38,10 @@ async def notify_admins_of_deletion(bot: Bot, message: Message, chat_id: int) ->
                 f"User ID: {message.from_user.id if message.from_user else 'N/A'}\n\n"
                 f"Message content:\n"
             )
-            
+
             # Send notification
             await bot.send_message(admin_id, notification, parse_mode="HTML")
-            
+
             # Try to forward the original message
             try:
                 await message.forward(admin_id)
@@ -62,10 +62,10 @@ async def cmd_start(message: Message, bot: Bot) -> None:
     """Handle /start command."""
     if not message.from_user or not message.chat:
         return
-    
+
     # Check if user is admin in this chat
     is_admin = await is_user_admin(bot, message.chat.id, message.from_user.id)
-    
+
     if message.chat.type == "private":
         await message.answer(
             "👋 Welcome to Telegram Antispam Bot!\n\n"
@@ -92,7 +92,7 @@ async def cmd_config(message: Message, bot: Bot) -> None:
     """Handle /config command with chat ID parameter in private messages."""
     if not message.from_user or not message.chat:
         return
-    
+
     # Only work in private messages
     if message.chat.type != "private":
         # Check if user is admin before responding
@@ -104,7 +104,7 @@ async def cmd_config(message: Message, bot: Bot) -> None:
             )
         # Don't reply to non-admins
         return
-    
+
     # Parse chat ID from command arguments
     command_args = message.text.split(maxsplit=1) if message.text else []
     if len(command_args) < 2:
@@ -115,13 +115,15 @@ async def cmd_config(message: Message, bot: Bot) -> None:
             "You can get the chat ID by using /status in the group."
         )
         return
-    
+
     try:
         chat_id = int(command_args[1])
     except ValueError:
-        await message.answer("❌ Invalid chat ID. Please provide a valid numeric chat ID.")
+        await message.answer(
+            "❌ Invalid chat ID. Please provide a valid numeric chat ID."
+        )
         return
-    
+
     # Check if user is admin in the specified chat
     is_admin = await is_user_admin(bot, chat_id, message.from_user.id)
     if not is_admin:
@@ -130,17 +132,17 @@ async def cmd_config(message: Message, bot: Bot) -> None:
             "You can only configure chats where you are an admin."
         )
         return
-    
+
     # Get current config
     config = get_chat_config(chat_id)
-    
+
     # Get linked channel info
     linked_channel = await get_linked_channel(bot, chat_id)
-    
+
     config_text = "⚙️ Current Configuration:\n\n"
     config_text += f"Chat ID: {chat_id}\n"
     config_text += f"Enabled: {'✅ Yes' if config.enabled else '❌ No'}\n"
-    
+
     if linked_channel:
         config_text += f"Linked Channel: @{linked_channel.username or 'N/A'} ({linked_channel.title})\n"
         # Auto-update allowed channel if linked channel exists
@@ -149,11 +151,13 @@ async def cmd_config(message: Message, bot: Bot) -> None:
             set_chat_config(chat_id, config)
     else:
         config_text += "Linked Channel: None\n"
-    
+
     config_text += f"Allowed Channel: @{config.allowed_channel_username or 'N/A'}\n"
-    
-    config_text += "\n💡 The bot automatically detects the linked channel and allows links to it."
-    
+
+    config_text += (
+        "\n💡 The bot automatically detects the linked channel and allows links to it."
+    )
+
     await message.answer(config_text)
 
 
@@ -162,41 +166,45 @@ async def cmd_status(message: Message, bot: Bot) -> None:
     """Handle /status command."""
     if not message.from_user or not message.chat:
         return
-    
+
     # Only work in groups
     if message.chat.type == "private":
         await message.answer("⚠️ This command only works in groups.")
         return
-    
+
     # Check if user is admin
     is_admin = await is_user_admin(bot, message.chat.id, message.from_user.id)
     if not is_admin:
         # Don't reply to non-admins
         return
-    
+
     # Check bot permissions
     try:
         bot_member = await bot.get_chat_member(message.chat.id, bot.id)
-        can_delete = bot_member.can_delete_messages if hasattr(bot_member, 'can_delete_messages') else False
+        can_delete = (
+            bot_member.can_delete_messages
+            if hasattr(bot_member, "can_delete_messages")
+            else False
+        )
     except Exception:
         can_delete = False
-    
+
     config = get_chat_config(message.chat.id)
     linked_channel = await get_linked_channel(bot, message.chat.id)
-    
+
     status_text = "📊 Bot Status:\n\n"
     status_text += f"Chat ID: `{message.chat.id}`\n"
     status_text += f"Filtering: {'✅ Active' if config.enabled else '❌ Inactive'}\n"
     status_text += f"Can Delete Messages: {'✅ Yes' if can_delete else '❌ No'}\n"
-    
+
     if linked_channel:
         status_text += f"Monitoring: {linked_channel.title}\n"
-    
+
     if not can_delete:
         status_text += "\n⚠️ Warning: Bot doesn't have permission to delete messages. Please make the bot an admin with 'Delete messages' permission."
-    
+
     status_text += f"\n\n💡 Use `/config {message.chat.id}` in private chat with the bot to configure settings."
-    
+
     await message.answer(status_text, parse_mode="Markdown")
 
 
@@ -205,20 +213,20 @@ async def cmd_enable(message: Message, bot: Bot) -> None:
     """Handle /enable command."""
     if not message.from_user or not message.chat:
         return
-    
+
     if message.chat.type == "private":
         await message.answer("⚠️ This command only works in groups.")
         return
-    
+
     is_admin = await is_user_admin(bot, message.chat.id, message.from_user.id)
     if not is_admin:
         # Don't reply to non-admins
         return
-    
+
     config = get_chat_config(message.chat.id)
     config.enabled = True
     set_chat_config(message.chat.id, config)
-    
+
     await message.answer("✅ Spam filtering enabled!")
 
 
@@ -227,20 +235,20 @@ async def cmd_disable(message: Message, bot: Bot) -> None:
     """Handle /disable command."""
     if not message.from_user or not message.chat:
         return
-    
+
     if message.chat.type == "private":
         await message.answer("⚠️ This command only works in groups.")
         return
-    
+
     is_admin = await is_user_admin(bot, message.chat.id, message.from_user.id)
     if not is_admin:
         # Don't reply to non-admins
         return
-    
+
     config = get_chat_config(message.chat.id)
     config.enabled = False
     set_chat_config(message.chat.id, config)
-    
+
     await message.answer("❌ Spam filtering disabled!")
 
 
@@ -249,24 +257,24 @@ async def filter_message(message: Message, bot: Bot) -> None:
     """Filter messages for spam."""
     if not message.chat:
         return
-    
+
     # Only filter in groups/supergroups
     if message.chat.type == "private":
         return
-    
+
     # Get chat config
     config = get_chat_config(message.chat.id)
-    
+
     # Skip if filtering is disabled
     if not config.enabled:
         return
-    
+
     # Get linked channel and update config
     linked_channel = await get_linked_channel(bot, message.chat.id)
     if linked_channel and linked_channel.username:
         config.allowed_channel_username = linked_channel.username
         set_chat_config(message.chat.id, config)
-    
+
     # Check if message is from the linked channel (sender_chat field)
     # Messages from channels have from.id = 777000 and sender_chat contains the actual channel
     if message.sender_chat and linked_channel:
@@ -276,20 +284,22 @@ async def filter_message(message: Message, bot: Bot) -> None:
                 f"Skipping message from linked channel {linked_channel.id} in chat {message.chat.id}"
             )
             return
-    
+
     # Skip if no from_user (shouldn't happen after sender_chat check, but be safe)
     if not message.from_user:
         return
-    
+
     # Check if message should be deleted
     try:
         # Get linked channel ID if available
         linked_channel_id = linked_channel.id if linked_channel else None
-        
-        if await should_delete_message(bot, message, config.allowed_channel_username, linked_channel_id):
+
+        if await should_delete_message(
+            bot, message, config.allowed_channel_username, linked_channel_id
+        ):
             # Notify admins before deletion
             await notify_admins_of_deletion(bot, message, message.chat.id)
-            
+
             # Delete the message
             await message.delete()
             logger.info(
