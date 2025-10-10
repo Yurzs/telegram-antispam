@@ -1,0 +1,393 @@
+"""Telegram Antispam Bot - Handlers module."""
+
+import logging
+
+from aiogram import Bot, Router
+from aiogram.filters import Command, CommandStart
+from aiogram.types import (
+    Message,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    CallbackQuery,
+)
+
+from .filters import is_user_admin, get_linked_channel, should_delete_message
+from .storage import get_chat_config, set_chat_config
+
+logger = logging.getLogger(__name__)
+
+router = Router()
+
+
+async def get_chat_admins(bot: Bot, chat_id: int) -> list[int]:
+    """Get list of admin user IDs for a chat."""
+    try:
+        admins = await bot.get_chat_administrators(chat_id)
+        # Filter out bots and return only user IDs
+        return [admin.user.id for admin in admins if not admin.user.is_bot]
+    except Exception as e:
+        logger.error(f"Failed to get admins for chat {chat_id}: {e}")
+        return []
+
+
+async def notify_admins_of_deletion(bot: Bot, message: Message, chat_id: int) -> None:
+    """Forward deleted message to chat admins via private message."""
+    admin_ids = await get_chat_admins(bot, chat_id)
+
+    for admin_id in admin_ids:
+        try:
+            # Create notification message
+            notification = (
+                f"🚫 Deleted message from chat {chat_id}\n"
+                f"User: {message.from_user.mention_html() if message.from_user else 'Unknown'}\n"
+                f"User ID: {message.from_user.id if message.from_user else 'N/A'}\n\n"
+                f"Message content:\n"
+            )
+
+            # Create inline keyboard with ban button
+            keyboard = None
+            if message.from_user:
+                keyboard = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="🚫 Ban User",
+                                callback_data=f"ban:{chat_id}:{message.from_user.id}",
+                            )
+                        ]
+                    ]
+                )
+
+            # Send notification
+            await bot.send_message(
+                admin_id, notification, parse_mode="HTML", reply_markup=keyboard
+            )
+
+            # Try to forward the original message
+            try:
+                await message.forward(admin_id)
+            except Exception:
+                # If forwarding fails, send the text content
+                if message.text:
+                    await bot.send_message(admin_id, f"Text: {message.text}")
+                elif message.caption:
+                    await bot.send_message(admin_id, f"Caption: {message.caption}")
+        except Exception as e:
+            # Admin might have blocked the bot or not started a conversation
+            logger.debug(f"Could not notify admin {admin_id}: {e}")
+            continue
+
+
+@router.message(CommandStart())
+async def cmd_start(message: Message, bot: Bot) -> None:
+    """Handle /start command."""
+    if not message.from_user or not message.chat:
+        return
+
+    # Check if user is admin in this chat
+    is_admin = await is_user_admin(bot, message.chat.id, message.from_user.id)
+
+    if message.chat.type == "private":
+        await message.answer(
+            "👋 Welcome to Telegram Antispam Bot!\n\n"
+            "This bot helps filter spam messages in channel discussion groups.\n\n"
+            "📋 Setup Instructions:\n\n"
+            "1️⃣ Add bot to your channel's discussion group (comments chat)\n"
+            "   • Make bot an ADMIN with 'Delete messages' permission\n\n"
+            "2️⃣ Add bot to your connected channel\n"
+            "   • Make bot an ADMIN without any special permissions\n"
+            "   • This allows the bot to detect the channel link\n\n"
+            "3️⃣ Configure the bot:\n"
+            "   • Use /status in the discussion group to get chat ID\n"
+            "   • Use /config <chat_id> here in private chat to view settings\n"
+            "   • Use /enable or /disable in the group to toggle filtering\n\n"
+            "The bot will automatically filter messages with external links while allowing:\n"
+            "✅ Links to your channel\n"
+            "✅ Messages from admins\n"
+            "✅ Messages without links"
+        )
+    elif is_admin:
+        await message.answer(
+            "✅ Bot is ready!\n\n"
+            "I will automatically filter messages with links from non-admin users.\n"
+            "Links to your connected channel are allowed.\n\n"
+            "⚠️ Important Setup Requirements:\n"
+            "• Bot must be admin in this chat with 'Delete messages' permission\n"
+            "• Bot must be admin in the connected channel (no special permissions needed)\n\n"
+            f"Use /status to check bot status and get the chat ID.\n"
+            f"Use `/config {message.chat.id}` in private chat with the bot to configure settings."
+        )
+    # Don't reply to non-admins in groups
+
+
+@router.message(Command("config"))
+async def cmd_config(message: Message, bot: Bot) -> None:
+    """Handle /config command with chat ID parameter in private messages."""
+    if not message.from_user or not message.chat:
+        return
+
+    # Only work in private messages
+    if message.chat.type != "private":
+        # Check if user is admin before responding
+        is_admin = await is_user_admin(bot, message.chat.id, message.from_user.id)
+        if is_admin:
+            await message.answer(
+                "⚠️ This command only works in private messages.\n"
+                "Use /config <chat_id> to configure a specific chat."
+            )
+        # Don't reply to non-admins
+        return
+
+    # Parse chat ID from command arguments
+    command_args = message.text.split(maxsplit=1) if message.text else []
+    if len(command_args) < 2:
+        await message.answer(
+            "❌ Please provide a chat ID.\n\n"
+            "Usage: /config <chat_id>\n"
+            "Example: /config -1002986805684\n"
+            "Or: /config 2986805684 (without -100 prefix)\n\n"
+            "You can get the chat ID by using /status in the group."
+        )
+        return
+
+    try:
+        chat_id_input = command_args[1]
+        # Remove leading minus if present
+        if chat_id_input.startswith("-"):
+            chat_id = int(chat_id_input)
+        else:
+            # If no minus, assume it's the short format (like from t.me/c/ links)
+            # Convert to full chat ID format by adding -100 prefix
+            chat_id = int(f"-100{chat_id_input}")
+    except ValueError:
+        await message.answer(
+            "❌ Invalid chat ID. Please provide a valid numeric chat ID."
+        )
+        return
+
+    # Check if user is admin in the specified chat
+    is_admin = await is_user_admin(bot, chat_id, message.from_user.id)
+    if not is_admin:
+        await message.answer(
+            f"❌ You are not an admin in chat {chat_id}.\n"
+            "You can only configure chats where you are an admin."
+        )
+        return
+
+    # Get current config
+    config = get_chat_config(chat_id)
+
+    # Get linked channel info
+    linked_channel = await get_linked_channel(bot, chat_id)
+
+    config_text = "⚙️ Current Configuration:\n\n"
+    config_text += f"Chat ID: {chat_id}\n"
+    config_text += f"Enabled: {'✅ Yes' if config.enabled else '❌ No'}\n"
+
+    if linked_channel:
+        config_text += f"Linked Channel: @{linked_channel.username or 'N/A'} ({linked_channel.title})\n"
+        # Auto-update allowed channel if linked channel exists
+        if linked_channel.username:
+            config.allowed_channel_username = linked_channel.username
+            set_chat_config(chat_id, config)
+    else:
+        config_text += "Linked Channel: None\n"
+
+    config_text += f"Allowed Channel: @{config.allowed_channel_username or 'N/A'}\n"
+
+    config_text += (
+        "\n💡 The bot automatically detects the linked channel and allows links to it."
+    )
+
+    await message.answer(config_text)
+
+
+@router.message(Command("status"))
+async def cmd_status(message: Message, bot: Bot) -> None:
+    """Handle /status command."""
+    if not message.from_user or not message.chat:
+        return
+
+    # Only work in groups
+    if message.chat.type == "private":
+        await message.answer("⚠️ This command only works in groups.")
+        return
+
+    # Check if user is admin
+    is_admin = await is_user_admin(bot, message.chat.id, message.from_user.id)
+    if not is_admin:
+        # Don't reply to non-admins
+        return
+
+    # Check bot permissions
+    try:
+        bot_member = await bot.get_chat_member(message.chat.id, bot.id)
+        can_delete = (
+            bot_member.can_delete_messages
+            if hasattr(bot_member, "can_delete_messages")
+            else False
+        )
+    except Exception:
+        can_delete = False
+
+    config = get_chat_config(message.chat.id)
+    linked_channel = await get_linked_channel(bot, message.chat.id)
+
+    status_text = "📊 Bot Status:\n\n"
+    status_text += f"Chat ID: `{message.chat.id}`\n"
+    status_text += f"Filtering: {'✅ Active' if config.enabled else '❌ Inactive'}\n"
+    status_text += f"Can Delete Messages: {'✅ Yes' if can_delete else '❌ No'}\n"
+
+    if linked_channel:
+        status_text += f"Monitoring: {linked_channel.title}\n"
+
+    if not can_delete:
+        status_text += "\n⚠️ Warning: Bot doesn't have permission to delete messages. Please make the bot an admin with 'Delete messages' permission."
+
+    status_text += f"\n\n💡 Use `/config {message.chat.id}` in private chat with the bot to configure settings."
+
+    await message.answer(status_text, parse_mode="Markdown")
+
+
+@router.message(Command("enable"))
+async def cmd_enable(message: Message, bot: Bot) -> None:
+    """Handle /enable command."""
+    if not message.from_user or not message.chat:
+        return
+
+    if message.chat.type == "private":
+        await message.answer("⚠️ This command only works in groups.")
+        return
+
+    is_admin = await is_user_admin(bot, message.chat.id, message.from_user.id)
+    if not is_admin:
+        # Don't reply to non-admins
+        return
+
+    config = get_chat_config(message.chat.id)
+    config.enabled = True
+    set_chat_config(message.chat.id, config)
+
+    await message.answer("✅ Spam filtering enabled!")
+
+
+@router.message(Command("disable"))
+async def cmd_disable(message: Message, bot: Bot) -> None:
+    """Handle /disable command."""
+    if not message.from_user or not message.chat:
+        return
+
+    if message.chat.type == "private":
+        await message.answer("⚠️ This command only works in groups.")
+        return
+
+    is_admin = await is_user_admin(bot, message.chat.id, message.from_user.id)
+    if not is_admin:
+        # Don't reply to non-admins
+        return
+
+    config = get_chat_config(message.chat.id)
+    config.enabled = False
+    set_chat_config(message.chat.id, config)
+
+    await message.answer("❌ Spam filtering disabled!")
+
+
+@router.message()
+async def filter_message(message: Message, bot: Bot) -> None:
+    """Filter messages for spam."""
+    if not message.chat:
+        return
+
+    # Only filter in groups/supergroups
+    if message.chat.type == "private":
+        return
+
+    # Get chat config
+    config = get_chat_config(message.chat.id)
+
+    # Skip if filtering is disabled
+    if not config.enabled:
+        return
+
+    # Get linked channel and update config
+    linked_channel = await get_linked_channel(bot, message.chat.id)
+    if linked_channel and linked_channel.username:
+        config.allowed_channel_username = linked_channel.username
+        set_chat_config(message.chat.id, config)
+
+    # Check if message is from the linked channel (sender_chat field)
+    # Messages from channels have from.id = 777000 and sender_chat contains the actual channel
+    if message.sender_chat and linked_channel:
+        if message.sender_chat.id == linked_channel.id:
+            # This is a message from the linked channel, don't filter it
+            logger.debug(
+                f"Skipping message from linked channel {linked_channel.id} in chat {message.chat.id}"
+            )
+            return
+
+    # Skip if no from_user (shouldn't happen after sender_chat check, but be safe)
+    if not message.from_user:
+        return
+
+    # Check if message should be deleted
+    try:
+        # Get linked channel ID if available
+        linked_channel_id = linked_channel.id if linked_channel else None
+
+        if await should_delete_message(
+            bot, message, config.allowed_channel_username, linked_channel_id
+        ):
+            # Notify admins before deletion
+            await notify_admins_of_deletion(bot, message, message.chat.id)
+
+            # Delete the message
+            await message.delete()
+            logger.info(
+                f"Deleted message from user {message.from_user.id} in chat {message.chat.id}"
+            )
+    except Exception as e:
+        logger.error(f"Failed to delete message: {e}")
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("ban:"))
+async def handle_ban_callback(callback: CallbackQuery, bot: Bot) -> None:
+    """Handle ban button callback."""
+    if not callback.data or not callback.from_user:
+        await callback.answer("❌ Invalid callback data")
+        return
+
+    try:
+        # Parse callback data: ban:chat_id:user_id
+        _, chat_id_str, user_id_str = callback.data.split(":")
+        chat_id = int(chat_id_str)
+        user_id = int(user_id_str)
+
+        # Check if the admin who clicked is actually an admin in that chat
+        is_admin = await is_user_admin(bot, chat_id, callback.from_user.id)
+        if not is_admin:
+            await callback.answer(
+                "❌ You are not an admin in that chat", show_alert=True
+            )
+            return
+
+        # Ban the user
+        await bot.ban_chat_member(chat_id, user_id)
+
+        # Update the message to show the ban was successful
+        if callback.message:
+            await callback.message.edit_text(
+                f"{callback.message.text}\n\n✅ User banned by {callback.from_user.mention_html()}",
+                parse_mode="HTML",
+            )
+
+        await callback.answer("✅ User banned successfully")
+        logger.info(
+            f"User {user_id} banned from chat {chat_id} by admin {callback.from_user.id}"
+        )
+
+    except ValueError:
+        await callback.answer("❌ Invalid callback data format", show_alert=True)
+    except Exception as e:
+        logger.error(f"Failed to ban user: {e}")
+        await callback.answer(f"❌ Failed to ban user: {str(e)}", show_alert=True)
