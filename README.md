@@ -76,7 +76,7 @@ docker-compose logs -f
 docker-compose down
 ```
 
-**Note**: Pre-built images are automatically published to GitHub Container Registry on every release and main branch update. You can also build locally if needed.
+**Note**: Pre-built images are automatically published to GitHub Container Registry when you create a new version tag (e.g., `v1.0.0`). You can also build locally if needed.
 
 ## Bot Setup in Telegram
 
