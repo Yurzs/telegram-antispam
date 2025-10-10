@@ -14,6 +14,49 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
+async def get_chat_admins(bot: Bot, chat_id: int) -> list[int]:
+    """Get list of admin user IDs for a chat."""
+    try:
+        admins = await bot.get_chat_administrators(chat_id)
+        # Filter out bots and return only user IDs
+        return [admin.user.id for admin in admins if not admin.user.is_bot]
+    except Exception as e:
+        logger.error(f"Failed to get admins for chat {chat_id}: {e}")
+        return []
+
+
+async def notify_admins_of_deletion(bot: Bot, message: Message, chat_id: int) -> None:
+    """Forward deleted message to chat admins via private message."""
+    admin_ids = await get_chat_admins(bot, chat_id)
+    
+    for admin_id in admin_ids:
+        try:
+            # Create notification message
+            notification = (
+                f"🚫 Deleted message from chat {chat_id}\n"
+                f"User: {message.from_user.mention_html() if message.from_user else 'Unknown'}\n"
+                f"User ID: {message.from_user.id if message.from_user else 'N/A'}\n\n"
+                f"Message content:\n"
+            )
+            
+            # Send notification
+            await bot.send_message(admin_id, notification, parse_mode="HTML")
+            
+            # Try to forward the original message
+            try:
+                await message.forward(admin_id)
+            except Exception:
+                # If forwarding fails, send the text content
+                if message.text:
+                    await bot.send_message(admin_id, f"Text: {message.text}")
+                elif message.caption:
+                    await bot.send_message(admin_id, f"Caption: {message.caption}")
+        except Exception as e:
+            # Admin might have blocked the bot or not started a conversation
+            logger.debug(f"Could not notify admin {admin_id}: {e}")
+            continue
+
+
 @router.message(CommandStart())
 async def cmd_start(message: Message, bot: Bot) -> None:
     """Handle /start command."""
@@ -41,8 +84,7 @@ async def cmd_start(message: Message, bot: Bot) -> None:
             f"Use /status to check bot status and get the chat ID.\n"
             f"Use `/config {message.chat.id}` in private chat with the bot to configure settings."
         )
-    else:
-        await message.answer("❌ This command is only available to admins.")
+    # Don't reply to non-admins in groups
 
 
 @router.message(Command("config"))
@@ -53,10 +95,14 @@ async def cmd_config(message: Message, bot: Bot) -> None:
     
     # Only work in private messages
     if message.chat.type != "private":
-        await message.answer(
-            "⚠️ This command only works in private messages.\n"
-            "Use /config <chat_id> to configure a specific chat."
-        )
+        # Check if user is admin before responding
+        is_admin = await is_user_admin(bot, message.chat.id, message.from_user.id)
+        if is_admin:
+            await message.answer(
+                "⚠️ This command only works in private messages.\n"
+                "Use /config <chat_id> to configure a specific chat."
+            )
+        # Don't reply to non-admins
         return
     
     # Parse chat ID from command arguments
@@ -125,7 +171,7 @@ async def cmd_status(message: Message, bot: Bot) -> None:
     # Check if user is admin
     is_admin = await is_user_admin(bot, message.chat.id, message.from_user.id)
     if not is_admin:
-        await message.answer("❌ This command is only available to admins.")
+        # Don't reply to non-admins
         return
     
     # Check bot permissions
@@ -166,7 +212,7 @@ async def cmd_enable(message: Message, bot: Bot) -> None:
     
     is_admin = await is_user_admin(bot, message.chat.id, message.from_user.id)
     if not is_admin:
-        await message.answer("❌ This command is only available to admins.")
+        # Don't reply to non-admins
         return
     
     config = get_chat_config(message.chat.id)
@@ -188,7 +234,7 @@ async def cmd_disable(message: Message, bot: Bot) -> None:
     
     is_admin = await is_user_admin(bot, message.chat.id, message.from_user.id)
     if not is_admin:
-        await message.answer("❌ This command is only available to admins.")
+        # Don't reply to non-admins
         return
     
     config = get_chat_config(message.chat.id)
@@ -238,15 +284,13 @@ async def filter_message(message: Message, bot: Bot) -> None:
     # Check if message should be deleted
     try:
         if await should_delete_message(bot, message, config.allowed_channel_username):
+            # Notify admins before deletion
+            await notify_admins_of_deletion(bot, message, message.chat.id)
+            
+            # Delete the message
             await message.delete()
             logger.info(
                 f"Deleted message from user {message.from_user.id} in chat {message.chat.id}"
             )
-            
-            # Optionally notify the user (can be removed if too noisy)
-            # await message.answer(
-            #     f"⚠️ Message from {message.from_user.mention_html()} was deleted (external links not allowed)",
-            #     parse_mode="HTML"
-            # )
     except Exception as e:
         logger.error(f"Failed to delete message: {e}")

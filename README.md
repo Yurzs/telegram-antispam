@@ -7,7 +7,8 @@ Telegram bot for filtering channel comments and preventing spam in discussion gr
 - 🛡️ **Automatic spam filtering**: Detects and removes messages with external links
 - 🔗 **Advanced link detection**: Detects URLs with or without protocol (https://, t.co/xyz, bit.ly/abc), formatted links in HTML/Markdown, and @mentions
 - ✅ **Channel integration**: Automatically allows links to the connected channel
-- 👮 **Admin-friendly**: Admins can post any links without restrictions
+- 👮 **Admin-friendly**: Admins can post any links without restrictions; non-admins' commands are silently ignored
+- 📬 **Admin notifications**: Deleted messages are forwarded to admins via private message for review
 - ⚙️ **Easy configuration**: Simple commands to manage the bot
 - 🐳 **Docker support**: Easy deployment with Docker and docker-compose
 - 📦 **UV package manager**: Fast, reliable dependency management with UV
