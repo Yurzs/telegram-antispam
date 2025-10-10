@@ -10,6 +10,7 @@ Telegram bot for filtering channel comments and preventing spam in discussion gr
 - 👮 **Admin-friendly**: Admins can post any links without restrictions; non-admins' commands are silently ignored
 - 📬 **Admin notifications**: Deleted messages are forwarded to admins via private message for review
 - ⚙️ **Easy configuration**: Simple commands to manage the bot
+- 🔄 **Polling & Webhook support**: Choose between polling mode or webhook mode for receiving updates
 - 🐳 **Docker support**: Easy deployment with Docker and docker-compose
 - 📦 **UV package manager**: Fast, reliable dependency management with UV
 
@@ -78,6 +79,58 @@ docker-compose down
 
 **Note**: Pre-built images are automatically published to GitHub Container Registry when you create a new version tag (e.g., `v1.0.0`). You can also build locally if needed.
 
+#### Using Webhook Mode (Advanced)
+
+For production deployments with webhook mode:
+
+1. **Set up a reverse proxy (e.g., nginx with SSL)**
+2. **Configure environment variables:**
+   ```bash
+   # In your .env file
+   BOT_TOKEN=your_bot_token_here
+   WEBHOOK_MODE=true
+   WEBHOOK_HOST=https://yourdomain.com
+   WEBHOOK_PATH=/webhook
+   WEBHOOK_PORT=8080
+   WEBHOOK_SECRET=your_random_secret_token
+   ```
+
+3. **Update docker-compose.yml to expose the webhook port:**
+   ```yaml
+   services:
+     bot:
+       image: ghcr.io/yurzs/telegram-antispam:latest
+       env_file:
+         - .env
+       restart: unless-stopped
+       ports:
+         - "8080:8080"  # Expose webhook port
+   ```
+
+4. **Configure nginx as reverse proxy:**
+   ```nginx
+   server {
+       listen 443 ssl;
+       server_name yourdomain.com;
+       
+       ssl_certificate /path/to/cert.pem;
+       ssl_certificate_key /path/to/key.pem;
+       
+       location /webhook {
+           proxy_pass http://localhost:8080/webhook;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+       }
+   }
+   ```
+
+5. **Start the bot:**
+   ```bash
+   docker-compose up -d
+   ```
+
 ## Bot Setup in Telegram
 
 1. **Add the bot to your channel's discussion group**
@@ -145,6 +198,20 @@ Environment variables in `.env`:
 
 - `BOT_TOKEN` - Your Telegram bot token (required)
 - `LOG_LEVEL` - Logging level: DEBUG, INFO, WARNING, ERROR (default: INFO)
+
+### Webhook Configuration (Optional)
+
+The bot supports both **polling** (default) and **webhook** modes:
+
+- `WEBHOOK_MODE` - Set to `true` to enable webhooks, `false` for polling (default: false)
+- `WEBHOOK_HOST` - Your public webhook URL (required if WEBHOOK_MODE=true, e.g., `https://yourdomain.com`)
+- `WEBHOOK_PATH` - Webhook endpoint path (default: `/webhook`)
+- `WEBHOOK_PORT` - Port for the webhook server (default: `8080`)
+- `WEBHOOK_SECRET` - Secret token for webhook security (optional but recommended)
+
+**Polling vs Webhook:**
+- **Polling** (default): Bot actively checks for new messages. Easier to set up, works anywhere.
+- **Webhook**: Telegram sends updates to your server. More efficient, requires public HTTPS URL and port forwarding/reverse proxy.
 
 ## Development
 

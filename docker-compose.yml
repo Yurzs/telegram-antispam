@@ -7,6 +7,9 @@ services:
     env_file:
       - .env
     restart: unless-stopped
+    # Uncomment the ports section below if using webhook mode
+    # ports:
+    #   - "8080:8080"
     logging:
       driver: "json-file"
       options:
