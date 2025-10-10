@@ -10,6 +10,7 @@ This document provides an overview of the Telegram Antispam Bot implementation.
 - Built with aiogram 3.15.0+
 - Async/await architecture
 - Robust error handling
+- Supports both polling and webhook modes
 
 ✅ **UV Package Manager**
 - pyproject.toml configuration
@@ -31,6 +32,12 @@ This document provides an overview of the Telegram Antispam Bot implementation.
 - Permission checking for admins
 - Configuration via bot commands
 - Multiple management commands
+
+✅ **Webhook Support**
+- Optional webhook mode alongside polling
+- Secure webhook with secret token support
+- Built-in aiohttp web server
+- Easy configuration via environment variables
 
 ## Architecture
 
@@ -111,7 +118,7 @@ All tests pass ✅
 
 ## Deployment Options
 
-### Option 1: Local with UV
+### Option 1: Local with UV (Polling Mode)
 ```bash
 uv venv
 source .venv/bin/activate
@@ -119,9 +126,41 @@ uv pip install -e .
 python -m bot
 ```
 
-### Option 2: Docker Compose
+### Option 2: Docker Compose (Polling Mode)
 ```bash
 docker-compose up -d
+```
+
+### Option 3: Webhook Mode
+For webhook mode, you need a public HTTPS URL and reverse proxy (e.g., nginx):
+
+```bash
+# Set environment variables
+export WEBHOOK_MODE=true
+export WEBHOOK_HOST=https://yourdomain.com
+export WEBHOOK_PATH=/webhook
+export WEBHOOK_PORT=8080
+export WEBHOOK_SECRET=your_secret_token
+
+# Run the bot
+python -m bot
+```
+
+**Nginx Configuration Example:**
+```nginx
+server {
+    listen 443 ssl;
+    server_name yourdomain.com;
+
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+
+    location /webhook {
+        proxy_pass http://localhost:8080/webhook;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
 ```
 
 ## Environment Configuration
@@ -131,6 +170,13 @@ Required:
 
 Optional:
 - `LOG_LEVEL`: DEBUG, INFO, WARNING, ERROR (default: INFO)
+
+Webhook Configuration (Optional):
+- `WEBHOOK_MODE`: Set to `true` to enable webhooks (default: `false` for polling)
+- `WEBHOOK_HOST`: Your public webhook URL (required if WEBHOOK_MODE=true)
+- `WEBHOOK_PATH`: Webhook endpoint path (default: `/webhook`)
+- `WEBHOOK_PORT`: Port for the webhook server (default: `8080`)
+- `WEBHOOK_SECRET`: Secret token for webhook security (optional but recommended)
 
 ## Usage Flow
 

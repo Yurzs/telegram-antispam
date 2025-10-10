@@ -4,6 +4,9 @@ import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher
+from aiogram.types import Update
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiohttp import web
 
 from .config import Config
 from .handlers import router
@@ -35,12 +38,65 @@ async def main() -> None:
     # Register router
     dp.include_router(router)
 
-    # Start polling
-    try:
-        logger.info("Bot started successfully!")
-        await dp.start_polling(bot)
-    finally:
-        await bot.session.close()
+    if config.webhook_mode:
+        # Webhook mode
+        logger.info("Running in webhook mode")
+        
+        # Set webhook
+        webhook_url = f"{config.webhook_host}{config.webhook_path}"
+        logger.info(f"Setting webhook to {webhook_url}")
+        
+        await bot.set_webhook(
+            url=webhook_url,
+            secret_token=config.webhook_secret if config.webhook_secret else None,
+            drop_pending_updates=True,
+        )
+        
+        # Create aiohttp application
+        app = web.Application()
+        
+        # Create webhook request handler
+        webhook_requests_handler = SimpleRequestHandler(
+            dispatcher=dp,
+            bot=bot,
+            secret_token=config.webhook_secret if config.webhook_secret else None,
+        )
+        
+        # Register webhook handler on the specified path
+        webhook_requests_handler.register(app, path=config.webhook_path)
+        
+        # Setup the application
+        setup_application(app, dp, bot=bot)
+        
+        # Start the web server
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, host="0.0.0.0", port=config.webhook_port)
+        
+        try:
+            await site.start()
+            logger.info(f"Webhook server started on port {config.webhook_port}")
+            logger.info("Bot started successfully!")
+            
+            # Keep the application running
+            await asyncio.Event().wait()
+        finally:
+            await bot.delete_webhook(drop_pending_updates=True)
+            await runner.cleanup()
+            await bot.session.close()
+    else:
+        # Polling mode
+        logger.info("Running in polling mode")
+        
+        # Delete webhook if it was set before
+        await bot.delete_webhook(drop_pending_updates=True)
+        
+        # Start polling
+        try:
+            logger.info("Bot started successfully!")
+            await dp.start_polling(bot)
+        finally:
+            await bot.session.close()
 
 
 if __name__ == "__main__":
