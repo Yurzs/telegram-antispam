@@ -9,6 +9,7 @@ Telegram bot for filtering channel comments and preventing spam in discussion gr
 - 👮 **Admin-friendly**: Admins can post any links without restrictions
 - ⚙️ **Easy configuration**: Simple commands to manage the bot
 - 🐳 **Docker support**: Easy deployment with Docker and docker-compose
+- 📦 **UV package manager**: Fast, reliable dependency management with UV
 
 ## Requirements
 
@@ -90,12 +91,32 @@ If you encounter SSL certificate errors during Docker build, you can use the pre
 
 ## How It Works
 
-1. The bot monitors all messages in the discussion group
-2. When a message contains links:
-   - If the user is an admin → message is allowed
-   - If the link is to the connected channel → message is allowed
-   - Otherwise → message is deleted
-3. Admins can configure the bot using commands in the group
+1. **The bot monitors all messages in the discussion group**
+2. **When a message contains links:**
+   - If the user is an admin → message is allowed ✅
+   - If the link is to the connected channel → message is allowed ✅
+   - Otherwise → message is deleted ❌
+3. **Admins can configure the bot using commands in the group**
+
+### Example Scenarios
+
+**Scenario 1: Regular user posts a link to the connected channel**
+```
+User: "Check out our latest post! https://t.me/mychannel/123"
+Bot: ✅ Allowed (link to connected channel)
+```
+
+**Scenario 2: Regular user posts an external link**
+```
+User: "Visit https://spam-site.com for prizes!"
+Bot: ❌ Deleted (external link from non-admin)
+```
+
+**Scenario 3: Admin posts any link**
+```
+Admin: "Here's a useful resource: https://example.com"
+Bot: ✅ Allowed (admin user)
+```
 
 ## Configuration
 
@@ -105,6 +126,29 @@ Environment variables in `.env`:
 - `LOG_LEVEL` - Logging level: DEBUG, INFO, WARNING, ERROR (default: INFO)
 
 ## Development
+
+### Quick Start Example
+
+1. **Create your bot**:
+   ```bash
+   # Talk to @BotFather and get your token
+   # Then set it up:
+   cp .env.example .env
+   # Edit .env and add: BOT_TOKEN=your_token_here
+   ```
+
+2. **Run locally**:
+   ```bash
+   uv venv
+   source .venv/bin/activate
+   uv pip install -e .
+   python -m bot
+   ```
+
+3. **Add to your Telegram channel**:
+   - Add the bot to your channel's discussion group
+   - Make it an admin with "Delete messages" permission
+   - Send `/start` in the group
 
 ### Project Structure
 
