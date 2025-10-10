@@ -30,15 +30,16 @@ async def cmd_start(message: Message, bot: Bot) -> None:
             "To use this bot:\n"
             "1. Add the bot to your channel's discussion group\n"
             "2. Make the bot an admin with 'Delete messages' permission\n"
-            "3. Use /config in the group to configure the bot\n"
+            "3. Use /status in the group to get the chat ID\n"
+            "4. Use /config <chat_id> here in private chat to configure the bot\n"
         )
     elif is_admin:
         await message.answer(
             "✅ Bot is ready!\n\n"
             "I will automatically filter messages with links from non-admin users.\n"
             "Links to your connected channel are allowed.\n\n"
-            "Use /config to view or change settings.\n"
-            "Use /status to check bot status."
+            f"Use /status to check bot status and get the chat ID.\n"
+            f"Use `/config {message.chat.id}` in private chat with the bot to configure settings."
         )
     else:
         await message.answer("❌ This command is only available to admins.")
@@ -46,29 +47,52 @@ async def cmd_start(message: Message, bot: Bot) -> None:
 
 @router.message(Command("config"))
 async def cmd_config(message: Message, bot: Bot) -> None:
-    """Handle /config command."""
+    """Handle /config command with chat ID parameter in private messages."""
     if not message.from_user or not message.chat:
         return
     
-    # Only work in groups
-    if message.chat.type == "private":
-        await message.answer("⚠️ This command only works in groups.")
+    # Only work in private messages
+    if message.chat.type != "private":
+        await message.answer(
+            "⚠️ This command only works in private messages.\n"
+            "Use /config <chat_id> to configure a specific chat."
+        )
         return
     
-    # Check if user is admin
-    is_admin = await is_user_admin(bot, message.chat.id, message.from_user.id)
+    # Parse chat ID from command arguments
+    command_args = message.text.split(maxsplit=1) if message.text else []
+    if len(command_args) < 2:
+        await message.answer(
+            "❌ Please provide a chat ID.\n\n"
+            "Usage: /config <chat_id>\n"
+            "Example: /config -1002986805684\n\n"
+            "You can get the chat ID by using /status in the group."
+        )
+        return
+    
+    try:
+        chat_id = int(command_args[1])
+    except ValueError:
+        await message.answer("❌ Invalid chat ID. Please provide a valid numeric chat ID.")
+        return
+    
+    # Check if user is admin in the specified chat
+    is_admin = await is_user_admin(bot, chat_id, message.from_user.id)
     if not is_admin:
-        await message.answer("❌ This command is only available to admins.")
+        await message.answer(
+            f"❌ You are not an admin in chat {chat_id}.\n"
+            "You can only configure chats where you are an admin."
+        )
         return
     
     # Get current config
-    config = get_chat_config(message.chat.id)
+    config = get_chat_config(chat_id)
     
     # Get linked channel info
-    linked_channel = await get_linked_channel(bot, message.chat.id)
+    linked_channel = await get_linked_channel(bot, chat_id)
     
     config_text = "⚙️ Current Configuration:\n\n"
-    config_text += f"Chat ID: {message.chat.id}\n"
+    config_text += f"Chat ID: {chat_id}\n"
     config_text += f"Enabled: {'✅ Yes' if config.enabled else '❌ No'}\n"
     
     if linked_channel:
@@ -76,7 +100,7 @@ async def cmd_config(message: Message, bot: Bot) -> None:
         # Auto-update allowed channel if linked channel exists
         if linked_channel.username:
             config.allowed_channel_username = linked_channel.username
-            set_chat_config(message.chat.id, config)
+            set_chat_config(chat_id, config)
     else:
         config_text += "Linked Channel: None\n"
     
@@ -115,6 +139,7 @@ async def cmd_status(message: Message, bot: Bot) -> None:
     linked_channel = await get_linked_channel(bot, message.chat.id)
     
     status_text = "📊 Bot Status:\n\n"
+    status_text += f"Chat ID: `{message.chat.id}`\n"
     status_text += f"Filtering: {'✅ Active' if config.enabled else '❌ Inactive'}\n"
     status_text += f"Can Delete Messages: {'✅ Yes' if can_delete else '❌ No'}\n"
     
@@ -124,7 +149,9 @@ async def cmd_status(message: Message, bot: Bot) -> None:
     if not can_delete:
         status_text += "\n⚠️ Warning: Bot doesn't have permission to delete messages. Please make the bot an admin with 'Delete messages' permission."
     
-    await message.answer(status_text)
+    status_text += f"\n\n💡 Use `/config {message.chat.id}` in private chat with the bot to configure settings."
+    
+    await message.answer(status_text, parse_mode="Markdown")
 
 
 @router.message(Command("enable"))

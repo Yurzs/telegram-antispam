@@ -78,16 +78,18 @@ If you encounter SSL certificate errors during Docker build, you can use the pre
    - Enable "Delete messages" permission
 
 3. **Configure the bot**
-   - Send `/start` in the group to initialize the bot
+   - Send `/status` in the group to get the chat ID
+   - Start a private chat with the bot and send `/start`
+   - Use `/config <chat_id>` in the private chat to view/configure settings
    - The bot will automatically detect the linked channel
 
 ## Commands
 
 - `/start` - Initialize the bot and show welcome message
-- `/config` - View current configuration
-- `/status` - Check bot status and permissions
-- `/enable` - Enable spam filtering (admin only)
-- `/disable` - Disable spam filtering (admin only)
+- `/status` - Check bot status and get chat ID (use in group)
+- `/config <chat_id>` - View/change configuration (use in private chat with bot)
+- `/enable` - Enable spam filtering (admin only, use in group)
+- `/disable` - Disable spam filtering (admin only, use in group)
 
 ## How It Works
 
@@ -148,7 +150,8 @@ Environment variables in `.env`:
 3. **Add to your Telegram channel**:
    - Add the bot to your channel's discussion group
    - Make it an admin with "Delete messages" permission
-   - Send `/start` in the group
+   - Send `/status` in the group to get the chat ID
+   - Use `/config <chat_id>` in private chat with the bot
 
 ### Project Structure
 
