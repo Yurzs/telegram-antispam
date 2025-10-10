@@ -4,7 +4,12 @@ import logging
 
 from aiogram import Bot, Router
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message
+from aiogram.types import (
+    Message,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    CallbackQuery,
+)
 
 from .filters import is_user_admin, get_linked_channel, should_delete_message
 from .storage import get_chat_config, set_chat_config
@@ -39,8 +44,24 @@ async def notify_admins_of_deletion(bot: Bot, message: Message, chat_id: int) ->
                 f"Message content:\n"
             )
 
+            # Create inline keyboard with ban button
+            keyboard = None
+            if message.from_user:
+                keyboard = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="🚫 Ban User",
+                                callback_data=f"ban:{chat_id}:{message.from_user.id}",
+                            )
+                        ]
+                    ]
+                )
+
             # Send notification
-            await bot.send_message(admin_id, notification, parse_mode="HTML")
+            await bot.send_message(
+                admin_id, notification, parse_mode="HTML", reply_markup=keyboard
+            )
 
             # Try to forward the original message
             try:
@@ -327,3 +348,46 @@ async def filter_message(message: Message, bot: Bot) -> None:
             )
     except Exception as e:
         logger.error(f"Failed to delete message: {e}")
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("ban:"))
+async def handle_ban_callback(callback: CallbackQuery, bot: Bot) -> None:
+    """Handle ban button callback."""
+    if not callback.data or not callback.from_user:
+        await callback.answer("❌ Invalid callback data")
+        return
+
+    try:
+        # Parse callback data: ban:chat_id:user_id
+        _, chat_id_str, user_id_str = callback.data.split(":")
+        chat_id = int(chat_id_str)
+        user_id = int(user_id_str)
+
+        # Check if the admin who clicked is actually an admin in that chat
+        is_admin = await is_user_admin(bot, chat_id, callback.from_user.id)
+        if not is_admin:
+            await callback.answer(
+                "❌ You are not an admin in that chat", show_alert=True
+            )
+            return
+
+        # Ban the user
+        await bot.ban_chat_member(chat_id, user_id)
+
+        # Update the message to show the ban was successful
+        if callback.message:
+            await callback.message.edit_text(
+                f"{callback.message.text}\n\n✅ User banned by {callback.from_user.mention_html()}",
+                parse_mode="HTML",
+            )
+
+        await callback.answer("✅ User banned successfully")
+        logger.info(
+            f"User {user_id} banned from chat {chat_id} by admin {callback.from_user.id}"
+        )
+
+    except ValueError:
+        await callback.answer("❌ Invalid callback data format", show_alert=True)
+    except Exception as e:
+        logger.error(f"Failed to ban user: {e}")
+        await callback.answer(f"❌ Failed to ban user: {str(e)}", show_alert=True)
