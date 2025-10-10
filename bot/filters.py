@@ -99,29 +99,67 @@ async def get_linked_channel(bot: Bot, chat_id: int) -> Optional[Chat]:
     return None
 
 
-def is_link_to_channel(link: str, channel_username: Optional[str]) -> bool:
-    """Check if link points to the allowed channel."""
-    if not channel_username:
-        return False
+def is_link_to_channel(link: str, channel_username: Optional[str] = None, 
+                      channel_id: Optional[int] = None, chat_id: Optional[int] = None) -> bool:
+    """Check if link points to the allowed channel or current chat.
     
-    # Remove @ if present
-    channel_username = channel_username.lstrip("@")
+    Args:
+        link: The link to check
+        channel_username: Username of the allowed channel
+        channel_id: ID of the linked channel
+        chat_id: ID of the current chat
+        
+    Returns:
+        True if link is to allowed channel or current chat, False otherwise
+    """
+    # Check username-based links
+    if channel_username:
+        # Remove @ if present
+        clean_username = channel_username.lstrip("@")
+        
+        # Check various formats
+        patterns = [
+            f"@{clean_username}",
+            f"t.me/{clean_username}",
+            f"https://t.me/{clean_username}",
+            f"http://t.me/{clean_username}",
+        ]
+        
+        if any(pattern.lower() in link.lower() for pattern in patterns):
+            return True
     
-    # Check various formats
-    patterns = [
-        f"@{channel_username}",
-        f"t.me/{channel_username}",
-        f"https://t.me/{channel_username}",
-        f"http://t.me/{channel_username}",
-    ]
+    # Check t.me/c/{channel_id} format (private channel/group links)
+    # Format: t.me/c/2929399460/7 or https://t.me/c/2929399460/7
+    # The ID in URL is without -100 prefix
+    import re
+    tme_c_pattern = r't\.me/c/(\d+)(?:/\d+)?'
+    match = re.search(tme_c_pattern, link, re.IGNORECASE)
     
-    return any(pattern.lower() in link.lower() for pattern in patterns)
+    if match:
+        link_channel_id = int(match.group(1))
+        
+        # Check if it matches the linked channel
+        if channel_id:
+            # Channel IDs in Telegram API have -100 prefix for supergroups/channels
+            # The link format uses ID without -100 prefix
+            channel_id_without_prefix = abs(channel_id) % 10000000000
+            if link_channel_id == channel_id_without_prefix:
+                return True
+        
+        # Check if it matches the current chat
+        if chat_id:
+            chat_id_without_prefix = abs(chat_id) % 10000000000
+            if link_channel_id == chat_id_without_prefix:
+                return True
+    
+    return False
 
 
 async def should_delete_message(
     bot: Bot,
     message: Message,
-    allowed_channel_username: Optional[str] = None
+    allowed_channel_username: Optional[str] = None,
+    linked_channel_id: Optional[int] = None
 ) -> bool:
     """Determine if message should be deleted based on filtering rules.
     
@@ -129,6 +167,7 @@ async def should_delete_message(
         bot: Bot instance
         message: Message to check
         allowed_channel_username: Username of the channel that is allowed
+        linked_channel_id: ID of the linked channel
         
     Returns:
         True if message should be deleted, False otherwise
@@ -156,13 +195,16 @@ async def should_delete_message(
     if not links:
         return False
     
+    # Get current chat ID
+    chat_id = message.chat.id if message.chat else None
+    
     # Check each link
     for link in links:
-        # If link is to the allowed channel, it's OK
-        if allowed_channel_username and is_link_to_channel(link, allowed_channel_username):
+        # If link is to the allowed channel or current chat, it's OK
+        if is_link_to_channel(link, allowed_channel_username, linked_channel_id, chat_id):
             continue
-        # Found a link that's not to the allowed channel
+        # Found a link that's not to the allowed channel or current chat
         return True
     
-    # All links are to the allowed channel
+    # All links are to the allowed channel or current chat
     return False

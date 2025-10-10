@@ -283,7 +283,10 @@ async def filter_message(message: Message, bot: Bot) -> None:
     
     # Check if message should be deleted
     try:
-        if await should_delete_message(bot, message, config.allowed_channel_username):
+        # Get linked channel ID if available
+        linked_channel_id = linked_channel.id if linked_channel else None
+        
+        if await should_delete_message(bot, message, config.allowed_channel_username, linked_channel_id):
             # Notify admins before deletion
             await notify_admins_of_deletion(bot, message, message.chat.id)
             
