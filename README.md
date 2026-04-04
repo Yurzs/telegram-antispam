@@ -11,6 +11,7 @@ Telegram bot for filtering channel comments and preventing spam in discussion gr
 - 📬 **Admin notifications**: Deleted messages are forwarded to admins via private message for review
 - ⚙️ **Easy configuration**: Simple commands to manage the bot
 - 🔄 **Polling & Webhook support**: Choose between polling mode or webhook mode for receiving updates
+- 🔒 **Proxy support**: Route Telegram API traffic through a SOCKS5/SOCKS4/HTTP proxy
 - 🐳 **Docker support**: Easy deployment with Docker and docker-compose
 - 📦 **UV package manager**: Fast, reliable dependency management with UV
 
@@ -198,6 +199,14 @@ Environment variables in `.env`:
 
 - `BOT_TOKEN` - Your Telegram bot token (required)
 - `LOG_LEVEL` - Logging level: DEBUG, INFO, WARNING, ERROR (default: INFO)
+
+### Proxy Configuration (Optional)
+
+The bot supports routing all Telegram API requests through a SOCKS5 (or SOCKS4/HTTP) proxy:
+
+- `PROXY_URL` - Proxy URL (e.g., `socks5://user:password@host:port`, `socks5://host:port`)
+
+This is useful when deploying in environments where direct access to the Telegram API is restricted.
 
 ### Webhook Configuration (Optional)
 
