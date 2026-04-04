@@ -19,6 +19,7 @@ class Config:
     webhook_path: str = "/webhook"
     webhook_port: int = 8080
     webhook_secret: str = ""
+    proxy_url: str = ""
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -42,4 +43,5 @@ class Config:
             webhook_path=os.getenv("WEBHOOK_PATH", "/webhook"),
             webhook_port=int(os.getenv("WEBHOOK_PORT", "8080")),
             webhook_secret=os.getenv("WEBHOOK_SECRET", ""),
+            proxy_url=os.getenv("PROXY_URL", ""),
         )

@@ -4,6 +4,7 @@ import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.types import Update
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
@@ -32,7 +33,8 @@ async def main() -> None:
     logger.info("Starting Telegram Antispam Bot...")
 
     # Initialize bot and dispatcher
-    bot = Bot(token=config.bot_token)
+    session = AiohttpSession(proxy=config.proxy_url) if config.proxy_url else None
+    bot = Bot(token=config.bot_token, session=session)
     dp = Dispatcher()
 
     # Register router
