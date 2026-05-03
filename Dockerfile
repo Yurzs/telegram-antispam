@@ -11,7 +11,7 @@ COPY pyproject.toml ./
 COPY bot ./bot
 
 # Install dependencies using uv
-RUN uv pip install --system --no-cache aiogram>=3.15.0 python-dotenv>=1.0.0
+RUN uv pip install --system --no-cache aiogram>=3.15.0 aiohttp-socks>=0.11.0 python-dotenv>=1.0.0
 
 # Expose webhook port (default 8080, can be overridden with WEBHOOK_PORT env var)
 EXPOSE 8080
